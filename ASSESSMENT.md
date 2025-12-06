@@ -162,76 +162,6 @@ s3-zipper-app/
 └── .gitignore                 # Git ignore patterns
 ```
 
-## GitHub Repository Setup
-
-### To Push to GitHub:
-
-```bash
-# 1. Create a new repository on GitHub
-#    Visit: https://github.com/new
-#    Repository name: s3-zipper-app
-#    Make it PUBLIC for submission
-
-# 2. Configure git credentials (if not already done)
-git config --global user.email "your-email@example.com"
-git config --global user.name "Your Name"
-
-# 3. Add remote and push
-git remote add origin https://github.com/YOUR-USERNAME/s3-zipper-app.git
-git branch -M main
-git push -u origin main
-
-# 4. Verify all commits are present
-git log --oneline
-```
-
-### Or use the provided script:
-```bash
-chmod +x push-to-github.sh
-./push-to-github.sh
-```
-
-## Deployment Instructions
-
-### Prerequisites
-```bash
-# Install required tools
-pip install aws-sam-cli
-brew install docker  # macOS
-aws configure       # Configure AWS credentials
-```
-
-### Deploy
-```bash
-# Clone the repository
-git clone https://github.com/YOUR-USERNAME/s3-zipper-app.git
-cd s3-zipper-app
-
-# Build with Docker
-sam build --use-container
-
-# Deploy (interactive setup)
-sam deploy --guided
-
-# Or deploy with existing config
-sam deploy
-```
-
-### Test
-```bash
-# Get bucket name
-BUCKET=$(aws cloudformation describe-stacks \
-  --stack-name s3-zipper-app-stack \
-  --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
-  --output text)
-
-# Upload test file
-aws s3 cp README.md s3://$BUCKET/uploads/test.txt
-
-# Verify compression
-aws s3 ls s3://$BUCKET/uploads/ --recursive
-```
-
 ## Free Tier Compliance
 
 This solution uses AWS Free Tier services:
@@ -307,23 +237,11 @@ This solution uses AWS Free Tier services:
 
 ## Next Steps for Review
 
-1. **View on GitHub**: https://github.com/YOUR-USERNAME/s3-zipper-app
+1. **View on GitHub**: https://github.com/me-hasan/s3-zipper-app
 2. **Review Commit History**: Shows clean development progression
 3. **Read README.md**: Full technical documentation
 4. **Check DEPLOYMENT.md**: Easy deployment instructions
 5. **Examine Source Code**: Well-commented Python implementation
 6. **Review Infrastructure**: template.yaml CloudFormation code
 
-## Contact
 
-For questions about this assessment:
-- Review commit messages for context on each decision
-- Check README.md for detailed technical explanations
-- Examine CloudFormation template for infrastructure decisions
-- Look at commit history to understand development flow
-
----
-
-**Submission Date**: December 2024
-**Technologies**: AWS Lambda, S3, CloudFormation, Docker, Python 3.11
-**Status**: ✅ All Tasks Complete

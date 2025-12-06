@@ -1,7 +1,25 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 
-Description: S3 Object Compression Lambda Function
+Description: |
+  S3 Object Compression Lambda Function
+  This template creates an S3 bucket, Lambda function with VPC integration,
+  and triggers Lambda when objects are uploaded to compress them into ZIP format.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - EnvironmentName
+          - VpcCIDR
+          - PrivateSubnetCIDR1
+          - PrivateSubnetCIDR2
+      - Label:
+          default: "S3 Configuration"
+        Parameters:
+          - S3BucketName
 
 Parameters:
   EnvironmentName:
@@ -12,6 +30,24 @@ Parameters:
       - dev
       - staging
       - prod
+
+  VpcCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block for VPC
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+
+  PrivateSubnetCIDR1:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: CIDR block for first private subnet
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+
+  PrivateSubnetCIDR2:
+    Type: String
+    Default: 10.0.2.0/24
+    Description: CIDR block for second private subnet
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
 
   S3BucketName:
     Type: String
@@ -26,10 +62,65 @@ Globals:
     Tracing: Active
 
 Resources:
+  # VPC Configuration
+  S3ZipperVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-vpc
+
+  # Private Subnets
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref S3ZipperVPC
+      CidrBlock: !Ref PrivateSubnetCIDR1
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-subnet-1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref S3ZipperVPC
+      CidrBlock: !Ref PrivateSubnetCIDR2
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-subnet-2
+
+  # Security Group for Lambda
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda function
+      VpcId: !Ref S3ZipperVPC
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS for AWS API calls
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP for potential redirects
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-lambda-sg
+
   # S3 Bucket for storing objects and compressed files
   S3ZipperBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
+    DependsOn:
+      - S3ZipperLambdaPermission
     Properties:
       BucketName: !Ref S3BucketName
       VersioningConfiguration:
@@ -43,6 +134,15 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      NotificationConfiguration:
+        LambdaFunctionConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt S3ZipperFunction.Arn
+            Filter:
+              Key:
+                FilterRules:
+                  - Name: prefix
+                    Value: uploads/
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-s3-zipper-bucket
@@ -61,7 +161,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: S3BucketAccess
           PolicyDocument:
@@ -77,9 +177,46 @@ Resources:
                 Action:
                   - s3:ListBucket
                 Resource: !GetAtt S3ZipperBucket.Arn
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-lambda-role
+
+  # Lambda Function using container image
+  S3ZipperFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      DockerContext: .
+      Dockerfile: Dockerfile
+    Properties:
+      FunctionName: !Sub ${EnvironmentName}-s3-zipper-function
+      PackageType: Image
+      Timeout: 300
+      MemorySize: 1024
+      Role: !GetAtt S3ZipperLambdaRole.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      EphemeralStorage:
+        Size: 10240
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+      Tags:
+        Name: !Sub ${EnvironmentName}-s3-zipper-function
+        Environment: !Ref EnvironmentName
 
   # Lambda S3 Invocation Permission
   S3ZipperLambdaPermission:
@@ -89,27 +226,6 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
       SourceArn: !Sub arn:aws:s3:::${S3BucketName}
-
-  # Lambda Function using container image
-  S3ZipperFunction:
-    Type: AWS::Serverless::Function
-    Metadata:
-      DockerContext: .
-      Dockerfile: Dockerfile
-    DependsOn:
-      - S3ZipperLambdaPermission
-    Properties:
-      FunctionName: !Sub ${EnvironmentName}-s3-zipper-function
-      PackageType: Image
-      Role: !GetAtt S3ZipperLambdaRole.Arn
-      EphemeralStorage:
-        Size: 10240
-      Environment:
-        Variables:
-          LOG_LEVEL: INFO
-      Tags:
-        Name: !Sub ${EnvironmentName}-s3-zipper-function
-        Environment: !Ref EnvironmentName
 
   # Lambda Function Version (for rollback capability)
   S3ZipperFunctionVersion:
@@ -170,18 +286,6 @@ Resources:
           Value: !Ref S3ZipperFunction
       TreatMissingData: notBreaching
 
-  # S3 Bucket Notification
-  BucketNotificationRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: s3.amazonaws.com
-            Action: sts:AssumeRole
-
 Outputs:
   S3BucketName:
     Description: Name of the S3 bucket for object compression
@@ -200,6 +304,30 @@ Outputs:
     Value: !Ref S3ZipperFunction
     Export:
       Name: !Sub ${AWS::StackName}-LambdaFunctionName
+
+  VpcId:
+    Description: VPC ID
+    Value: !Ref S3ZipperVPC
+    Export:
+      Name: !Sub ${AWS::StackName}-VpcId
+
+  PrivateSubnet1:
+    Description: Private Subnet 1 ID
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnet1
+
+  PrivateSubnet2:
+    Description: Private Subnet 2 ID
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnet2
+
+  SecurityGroupId:
+    Description: Security Group ID for Lambda
+    Value: !Ref LambdaSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-SecurityGroupId
 
   LambdaVersion:
     Description: Current Lambda function version

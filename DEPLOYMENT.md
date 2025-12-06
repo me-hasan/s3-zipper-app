@@ -9,7 +9,7 @@
 
 ### Step 1: Clone Repository
 ```bash
-git clone https://github.com/your-username/s3-zipper-app.git
+git clone https://github.com/me-hasan/s3-zipper-app.git
 cd s3-zipper-app
 ```
 

@@ -1,6 +1,0 @@
-version = 0.1
-[default]
-[default.deploy]
-parameters = "ParameterKey=EnvironmentName,ParameterValue=dev ParameterKey=VpcCIDR,ParameterValue=10.0.0.0/16 ParameterKey=PrivateSubnetCIDR1,ParameterValue=10.0.1.0/24 ParameterKey=PrivateSubnetCIDR2,ParameterValue=10.0.2.0/24 ParameterKey=S3BucketName,ParameterValue=s3-zipper-app-dev"
-[default.deploy.sync]
-watch = true
