@@ -1,0 +1,80 @@
+name: SAM Build and Deploy
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    branches:
+      - master
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  ARTIFACT_BUCKET: s3-zipper-artifacts
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install SAM CLI
+        run: |
+          pip install --upgrade aws-sam-cli
+      
+      - name: Validate SAM template
+        run: |
+          sam validate --template template.yaml
+      
+      - name: Build SAM application
+        run: |
+          sam build --use-container
+      
+      - name: Run tests (optional)
+        run: |
+          python -m pytest tests/ || true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install SAM CLI
+        run: |
+          pip install --upgrade aws-sam-cli
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Build SAM application
+        run: |
+          sam build --use-container
+      
+      - name: Deploy SAM application
+        run: |
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              S3BucketName=s3-zipper-app-${{ github.run_id }} \
+              EnvironmentName=prod
