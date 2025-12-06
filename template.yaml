@@ -59,11 +59,7 @@ Globals:
   Function:
     Timeout: 300
     MemorySize: 1024
-    Runtime: python3.11
     Tracing: Active
-    Environment:
-      Variables:
-        LOG_LEVEL: INFO
 
 Resources:
   # VPC Configuration
@@ -207,6 +203,9 @@ Resources:
   # Lambda Function using container image
   S3ZipperFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      DockerContext: .
+      Dockerfile: Dockerfile
     Properties:
       FunctionName: !Sub ${EnvironmentName}-s3-zipper-function
       PackageType: Image
@@ -224,9 +223,6 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: INFO
-      Metadata:
-        DockerContext: .
-        Dockerfile: Dockerfile
       Tags:
         Name: !Sub ${EnvironmentName}-s3-zipper-function
         Environment: !Ref EnvironmentName
