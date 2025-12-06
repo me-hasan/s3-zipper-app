@@ -56,17 +56,6 @@ Private Subnet 2 CIDR: 10.0.2.0/24
 S3 Bucket Name: s3-zipper-app-XXXXXXXXXX (must be globally unique)
 ```
 
-## Cost Estimation
-
-- **S3 Storage**: ~$17,000/month (with Intelligent-Tiering)
-- **Lambda**: ~$96,000/month
-- **VPC NAT**: ~$6,500/month
-- **CloudWatch**: ~$10,000-30,000/month (depends on log filtering)
-
-**Total: $129,000-$150,000/month** for 1M files/hour at 10MB each
-
-See README.md for detailed cost analysis and optimization strategies.
-
 ## Troubleshooting
 
 ### Lambda not triggered

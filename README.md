@@ -7,8 +7,6 @@
 - [Setup & Deployment](#setup--deployment)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
-- [Cost Analysis](#cost-analysis)
-- [Scalability & Performance](#scalability--performance)
 - [Troubleshooting](#troubleshooting)
 - [Future Improvements](#future-improvements)
 
