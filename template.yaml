@@ -119,6 +119,8 @@ Resources:
   S3ZipperBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
+    DependsOn:
+      - S3ZipperLambdaPermission
     Properties:
       BucketName: !Ref S3BucketName
       VersioningConfiguration:
@@ -132,20 +134,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName}-s3-zipper-bucket
-        - Key: Environment
-          Value: !Ref EnvironmentName
-
-  # S3 Bucket Notification Configuration
-  BucketNotificationConfiguration:
-    Type: AWS::S3::Bucket
-    DependsOn:
-      - S3ZipperFunction
-      - S3ZipperLambdaPermission
-    Properties:
-      BucketName: !Ref S3ZipperBucket
       NotificationConfiguration:
         LambdaFunctionConfigurations:
           - Event: s3:ObjectCreated:*
@@ -155,8 +143,11 @@ Resources:
                 FilterRules:
                   - Name: prefix
                     Value: uploads/
-                  - Name: suffix
-                    Value: ""
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-s3-zipper-bucket
+        - Key: Environment
+          Value: !Ref EnvironmentName
 
   # Lambda Execution Role
   S3ZipperLambdaRole:
