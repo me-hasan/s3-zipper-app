@@ -11,7 +11,7 @@ import boto3
 import io
 import logging
 import os
-from zipfile import ZipFile
+from zipfile import ZipFile, ZIP_DEFLATED
 from urllib.parse import unquote_plus
 
 # Configure logging
@@ -59,7 +59,7 @@ def lambda_handler(event, context):
         
         # Create ZIP file in memory
         zip_buffer = io.BytesIO()
-        with ZipFile(zip_buffer, 'w') as zip_file:
+        with ZipFile(zip_buffer, 'w', compression=ZIP_DEFLATED) as zip_file:
             zip_file.writestr(os.path.basename(key), file_content)
         
         zip_buffer.seek(0)

@@ -81,14 +81,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-lambda-role
 
-  # Lambda S3 Invocation Permission
-  S3ZipperLambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref S3ZipperFunction
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceArn: !Sub arn:aws:s3:::${S3BucketName}
+  # Lambda S3 Invocation Permission (managed automatically by SAM Events)
 
   # Lambda Function using container image
   S3ZipperFunction:
@@ -96,8 +89,6 @@ Resources:
     Metadata:
       DockerContext: .
       Dockerfile: Dockerfile
-    DependsOn:
-      - S3ZipperLambdaPermission
     Properties:
       FunctionName: !Sub ${EnvironmentName}-s3-zipper-function
       PackageType: Image
@@ -107,6 +98,17 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: INFO
+      Events:
+        S3ObjectCreated:
+          Type: S3
+          Properties:
+            Bucket: !Ref S3ZipperBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: uploads/
       Tags:
         Name: !Sub ${EnvironmentName}-s3-zipper-function
         Environment: !Ref EnvironmentName
@@ -171,16 +173,7 @@ Resources:
       TreatMissingData: notBreaching
 
   # S3 Bucket Notification
-  BucketNotificationRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: s3.amazonaws.com
-            Action: sts:AssumeRole
+  # S3 Bucket Notification role not required; events configured on function
 
 Outputs:
   S3BucketName:
