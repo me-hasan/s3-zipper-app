@@ -12,7 +12,9 @@ on:
 
 env:
   AWS_REGION: us-east-1
+  AWS_DEFAULT_REGION: us-east-1
   ARTIFACT_BUCKET: s3-zipper-artifacts
+  SAM_CLI_TELEMETRY: "0"
 
 jobs:
   build:
@@ -32,11 +34,11 @@ jobs:
       
       - name: Validate SAM template
         run: |
-          sam validate --template template.yaml
+          sam validate --template template.yaml --region ${{ env.AWS_REGION }}
       
       - name: Build SAM application
         run: |
-          sam build --use-container
+          sam build --use-container --region ${{ env.AWS_REGION }}
       
       - name: Run tests (optional)
         run: |
@@ -76,13 +78,14 @@ jobs:
       
       - name: Build SAM application
         run: |
-          sam build --use-container
+          sam build --use-container --region ${{ env.AWS_REGION }}
       
       - name: Deploy SAM application
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           IMAGE_REPO="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/s3-zipper-app"
           sam deploy \
+            --region ${{ env.AWS_REGION }} \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --image-repository "$IMAGE_REPO" \
