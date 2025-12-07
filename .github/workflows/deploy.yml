@@ -85,9 +85,11 @@ jobs:
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           IMAGE_REPO="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/s3-zipper-app"
           sam deploy \
+            --stack-name s3-zipper-app-stack \
             --region ${{ env.AWS_REGION }} \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
+            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
             --image-repository "$IMAGE_REPO" \
             --parameter-overrides \
               S3BucketName=s3-zipper-app-${{ github.run_id }} \
