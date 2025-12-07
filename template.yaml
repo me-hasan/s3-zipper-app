@@ -114,20 +114,10 @@ Resources:
         Environment: !Ref EnvironmentName
 
   # Lambda Function Version (for rollback capability)
-  S3ZipperFunctionVersion:
-    Type: AWS::Lambda::Version
-    Properties:
-      FunctionName: !Ref S3ZipperFunction
-      Description: !Sub 'Version created at ${AWS::StackName}'
+  # (Removed) Lambda Function Version to avoid cycles during S3 event wiring
 
   # Lambda Function Alias for easy version management
-  S3ZipperFunctionAlias:
-    Type: AWS::Lambda::Alias
-    Properties:
-      FunctionName: !Ref S3ZipperFunction
-      FunctionVersion: !GetAtt S3ZipperFunctionVersion.Version
-      Name: live
-      Description: Live alias pointing to latest version
+  # (Removed) Lambda Function Alias to avoid cycles
 
   # CloudWatch Log Group
   LambdaLogGroup:
@@ -136,41 +126,9 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${EnvironmentName}-s3-zipper-function
       RetentionInDays: 30
 
-  # CloudWatch Alarm for Lambda Errors
-  LambdaErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub ${EnvironmentName}-s3-zipper-errors
-      AlarmDescription: Alert when Lambda function errors occur
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 5
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref S3ZipperFunction
-      TreatMissingData: notBreaching
+  # (Removed) CloudWatch Alarm for Lambda Errors to avoid cycles
 
-  # CloudWatch Alarm for Lambda Duration
-  LambdaDurationAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub ${EnvironmentName}-s3-zipper-duration
-      AlarmDescription: Alert when Lambda execution exceeds 60 seconds
-      MetricName: Duration
-      Namespace: AWS/Lambda
-      Statistic: Average
-      Period: 300
-      EvaluationPeriods: 2
-      Threshold: 60000
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref S3ZipperFunction
-      TreatMissingData: notBreaching
+  # (Removed) CloudWatch Alarm for Lambda Duration to avoid cycles
 
   # S3 Bucket Notification
   # S3 Bucket Notification role not required; events configured on function
@@ -194,10 +152,4 @@ Outputs:
     Export:
       Name: !Sub ${AWS::StackName}-LambdaFunctionName
 
-  LambdaVersion:
-    Description: Current Lambda function version
-    Value: !GetAtt S3ZipperFunctionVersion.Version
-
-  LambdaVersionArn:
-    Description: ARN of Lambda function version
-    Value: !GetAtt S3ZipperFunctionVersion.FunctionArn
+  # (Removed) Lambda version outputs
