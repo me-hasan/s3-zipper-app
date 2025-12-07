@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-This project fulfills all requirements of the AWS Lambda S3 Compression DevOps Assessment. The solution implements an automated file compression system that processes S3 objects in real-time, stores compressed versions, and maintains system reliability through CloudFormation-based infrastructure.
+This project delivers an automated S3 object compression system that processes S3 objects in real time, stores compressed versions, and deploys via CloudFormation/SAM with a Dockerized Lambda and CI/CD.
 
 ## Deliverables Checklist
 
@@ -24,17 +24,15 @@ This project fulfills all requirements of the AWS Lambda S3 Compression DevOps A
 - CloudWatch logging with compression metrics
 ```
 
-### ✅ Task 2: CloudFormation with VPC Integration
-- **Status**: COMPLETE
+### ✅ Task 2: CloudFormation Stack (Bucket + Lambda + Docker)
+- **Status**: COMPLETE (baseline), VPC & Versioning: PLANNED
 - **Implementation**: `template.yaml`
 - **Infrastructure**:
-  - Custom VPC (10.0.0.0/16)
-  - Private subnets across 2 AZs (10.0.1.0/24, 10.0.2.0/24)
-  - Security group with HTTPS egress rules
   - S3 bucket with versioning and encryption
   - Lambda with container image packaging
-  - Function versioning and alias configuration
-  - CloudWatch monitoring with alarms
+  - S3 trigger wired in the function via SAM `Events`
+  - CloudWatch Logs group
+  - CI/CD workflow builds and deploys container image to ECR
   - IAM roles with least privilege permissions
 
 **Deployment Method**: AWS SAM (Serverless Application Model)
@@ -43,7 +41,7 @@ sam build --use-container
 sam deploy --guided
 ```
 
-**Lambda Versioning**: Automatic version creation on each deployment with aliases for rollback
+**VPC & Versioning**: A VPC-enabled and alias/versioned configuration is available in `template.yaml.bak`. It can be reintroduced after deployment stabilization to avoid circular dependencies during S3 event wiring.
 
 ### ✅ Task 3: Git Commits with Best Practices
 - **Status**: COMPLETE
@@ -146,7 +144,7 @@ Potential Savings:                     87%
 s3-zipper-app/
 ├── README.md                    # Main documentation (791 lines)
 ├── DEPLOYMENT.md               # Deployment guide
-├── template.yaml               # SAM CloudFormation (351 lines)
+├── template.yaml               # SAM CloudFormation (simplified to avoid cycles)
 ├── Dockerfile                  # Lambda container (14 lines)
 ├── samconfig.toml             # SAM deployment config
 ├── LICENSE                     # MIT License
@@ -162,7 +160,7 @@ s3-zipper-app/
 └── .gitignore                 # Git ignore patterns
 ```
 
-## Free Tier Compliance
+## Free Tier Considerations
 
 This solution uses AWS Free Tier services:
 - **Lambda**: 1,000,000 free requests/month (includes excess)
@@ -170,15 +168,15 @@ This solution uses AWS Free Tier services:
 - **CloudWatch**: 5 GB free log ingestion
 - **VPC**: Free (no charge for NAT is not free, but VPC itself is)
 
-**Note**: At 1M files/hour scale, this exceeds Free Tier limits. Budget accordingly when testing.
+**Note**: At 1M files/hour scale, this exceeds Free Tier limits. Use small-scale tests.
 
 ## Key Features
 
 ✅ **Automated Compression**: On-demand ZIP compression triggered by S3 events
-✅ **VPC Integration**: Runs in private subnets with network isolation
+✅ **CI/CD**: GitHub Actions workflow included
 ✅ **Containerized**: Docker image for Lambda consistency
-✅ **Versioning**: Automatic version creation with alias-based rollback
-✅ **Monitoring**: CloudWatch logs and alarms for observability
+✅ **Observability**: CloudWatch logs
+✅ **Infrastructure as Code**: Complete CloudFormation definition
 ✅ **Infrastructure as Code**: Complete CloudFormation definition
 ✅ **CI/CD Ready**: GitHub Actions workflow included
 ✅ **Well Documented**: 791-line README with cost and scalability analysis
@@ -214,10 +212,9 @@ This solution uses AWS Free Tier services:
 | 1 | Original Deletion | ✅ | src/app.py (line 75) |
 | 2 | CloudFormation | ✅ | template.yaml |
 | 2 | S3 Bucket | ✅ | template.yaml (lines 101-115) |
-| 2 | Lambda in VPC | ✅ | template.yaml (lines 170-178) |
-| 2 | Private Subnets | ✅ | template.yaml (lines 72-95) |
+| 2 | S3 Trigger | ✅ | template.yaml (Events) |
 | 2 | Dockerization | ✅ | Dockerfile |
-| 2 | Versioning | ✅ | template.yaml (lines 210-224) |
+| 2 | VPC + Versioning | ➜ | `template.yaml.bak` reference |
 | 3 | Git Best Practices | ✅ | 9 semantic commits |
 | 3 | Commit History | ✅ | `git log --oneline` |
 | 3 | README | ✅ | README.md (791 lines) |
@@ -235,6 +232,12 @@ This solution uses AWS Free Tier services:
 - **commit messages**: Git history tells the development story
 - **GitHub Issues**: Template for bug reports and feature requests
 
+## Evidence
+
+- GitHub Actions: successful build and deploy run on `main`.
+- S3 Bucket `uploads/` shows zipped outputs (`*.zip`), originals removed.
+- CLI validation via `aws s3 cp` uploads and `aws s3 ls` listing.
+
 ## Next Steps for Review
 
 1. **View on GitHub**: https://github.com/me-hasan/s3-zipper-app
@@ -243,5 +246,4 @@ This solution uses AWS Free Tier services:
 4. **Check DEPLOYMENT.md**: Easy deployment instructions
 5. **Examine Source Code**: Well-commented Python implementation
 6. **Review Infrastructure**: template.yaml CloudFormation code
-
 

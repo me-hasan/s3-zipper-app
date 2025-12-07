@@ -6,6 +6,7 @@
 - AWS CLI configured with credentials
 - Docker installed
 - SAM CLI installed: `pip install aws-sam-cli`
+ - GitHub repository with Actions enabled
 
 ### Step 1: Clone Repository
 ```bash
@@ -18,13 +19,37 @@ cd s3-zipper-app
 sam build --use-container
 ```
 
-### Step 3: Deploy
-```bash
-# First deployment (interactive)
-sam deploy --guided
+### Step 3: Set Up CI Secrets
+In GitHub → Repository → Settings → Secrets and variables → Actions, add:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
 
-# Subsequent deployments
-sam deploy
+### Step 4: Deploy (CI or Local)
+#### CI (recommended)
+Push to `main` and let the workflow deploy automatically.
+#### Local (non-interactive)
+```bash
+export AWS_REGION=us-east-1
+export S3_BUCKET_NAME=s3-zipper-app-$(date +%s)
+
+# Ensure ECR exists and login
+aws ecr describe-repositories --repository-names s3-zipper-app --region $AWS_REGION >/dev/null 2>&1 || \
+  aws ecr create-repository --repository-name s3-zipper-app --region $AWS_REGION
+aws ecr get-login-password --region $AWS_REGION | \
+  docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com
+
+sam build --use-container --region $AWS_REGION
+
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+IMAGE_REPO="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/s3-zipper-app"
+sam deploy \
+  --stack-name s3-zipper-app-stack \
+  --region $AWS_REGION \
+  --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+  --no-confirm-changeset \
+  --no-fail-on-empty-changeset \
+  --image-repository "$IMAGE_REPO" \
+  --parameter-overrides S3BucketName=$S3_BUCKET_NAME EnvironmentName=dev
 ```
 
 ### Step 4: Test
@@ -38,7 +63,7 @@ BUCKET=$(aws cloudformation describe-stacks \
 # Upload a test file
 aws s3 cp README.md s3://$BUCKET/uploads/test-file.txt
 
-# Check for compressed file
+# Check for compressed file (original deleted)
 aws s3 ls s3://$BUCKET/uploads/ --recursive
 ```
 
@@ -49,11 +74,9 @@ When running `sam deploy --guided`, use these parameters:
 ```
 Stack Name: s3-zipper-app-stack
 Region: us-east-1 (or your preferred region)
-Environment Name: dev (or prod for production)
-VPC CIDR: 10.0.0.0/16
-Private Subnet 1 CIDR: 10.0.1.0/24
-Private Subnet 2 CIDR: 10.0.2.0/24
+Environment Name: dev or prod
 S3 Bucket Name: s3-zipper-app-XXXXXXXXXX (must be globally unique)
+Note: VPC and Lambda versioning can be reintroduced using `template.yaml.bak` once deployment stabilization is complete.
 ```
 
 ## Troubleshooting
@@ -75,14 +98,7 @@ S3 Bucket Name: s3-zipper-app-XXXXXXXXXX (must be globally unique)
 ## Rollback
 
 ```bash
-# List available function versions
-aws lambda list-versions-by-function --function-name dev-s3-zipper-function
-
-# Rollback to previous version
-aws lambda update-alias \
-  --function-name dev-s3-zipper-function \
-  --name live \
-  --function-version 2
+# Use CloudFormation to rollback to a previous stack or redeploy prior image tag.
 ```
 
 ## Clean Up

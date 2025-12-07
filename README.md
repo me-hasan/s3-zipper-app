@@ -9,18 +9,22 @@
 - [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
 - [Future Improvements](#future-improvements)
+ - [Implementation Summary](#implementation-summary)
+ - [CI/CD](#cicd)
 
 ## Overview
 
-This project implements an automated S3 object compression system using AWS Lambda, CloudFormation, and Docker. When files are uploaded to an S3 bucket, a Lambda function automatically compresses them into ZIP format and removes the original objects. The solution is designed for media companies processing large quantities of high-quality videos.
+This project implements an automated S3 object compression system using AWS Lambda, CloudFormation, and Docker. When files are uploaded to an S3 bucket under the `uploads/` prefix, a Lambda function automatically compresses them into ZIP format and removes the original objects. The solution is designed for media companies processing large quantities of high-quality videos.
 
 **Key Features:**
-- Automatic compression of objects on S3 upload
-- Runs in private VPC subnets with network isolation
+- Automatic compression of objects on S3 upload (prefix `uploads/`)
 - Dockerized Lambda function for consistency
-- Versioning and rollback capability
-- CloudWatch monitoring and alarms
+- CloudWatch Logs for observability
 - Infrastructure as Code using AWS SAM
+- GitHub Actions CI/CD to build and deploy on `main`
+
+**Note on VPC and Versioning:**
+- To stabilize deployment and avoid circular dependencies, the current stack runs outside a VPC and does not create explicit Lambda Versions/Aliases or CloudWatch Alarms. A VPC-enabled and versioned configuration is available as a template reference in `template.yaml.bak` and can be reintroduced after deployment stabilization.
 
 ## Architecture
 
@@ -38,14 +42,13 @@ This project implements an automated S3 object compression system using AWS Lamb
 │  │  │        Private Subnet 1 (10.0.1.0/24)           │ │ │
 │  │  │  ┌────────────────────────────────────────────┐  │ │ │
 │  │  │  │  Lambda Function (Dockerized)            │  │ │ │
-│  │  │  │  - Compression Logic                      │  │ │ │
+│  │  │  │  - Compression Logic (ZIP_DEFLATED)       │  │ │ │
 │  │  │  │  - S3 Client Operations                   │  │ │ │
 │  │  │  └────────────────────────────────────────────┘  │ │ │
 │  │  └──────────────────────────────────────────────────┘ │ │
 │  │                                                        │ │
 │  │  ┌──────────────────────────────────────────────────┐ │ │
-│  │  │        Private Subnet 2 (10.0.2.0/24)           │ │ │
-│  │  │  (Used for high availability)                   │ │ │
+│  │  │        (Private subnets optional; current stack runs outside VPC) │ │ │
 │  │  └──────────────────────────────────────────────────┘ │ │
 │  └──────────────────────────────────────────────────────┘ │
 │                                                             │
@@ -141,17 +144,26 @@ sam validate
 ### 4. Deploy to AWS
 
 ```bash
-# First deployment (interactive)
-sam deploy --guided \
-  --parameter-overrides \
-    S3BucketName=$S3_BUCKET_NAME \
-    EnvironmentName=dev
+# Build
+sam build --use-container
 
-# Subsequent deployments (non-interactive)
+# Ensure ECR exists and login
+aws ecr describe-repositories --repository-names s3-zipper-app --region $AWS_REGION >/dev/null 2>&1 || \
+  aws ecr create-repository --repository-name s3-zipper-app --region $AWS_REGION
+aws ecr get-login-password --region $AWS_REGION | \
+  docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com
+
+# Deploy (non-interactive)
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+IMAGE_REPO="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/s3-zipper-app"
 sam deploy \
-  --parameter-overrides \
-    S3BucketName=$S3_BUCKET_NAME \
-    EnvironmentName=dev
+  --stack-name s3-zipper-app-stack \
+  --region $AWS_REGION \
+  --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+  --no-confirm-changeset \
+  --no-fail-on-empty-changeset \
+  --image-repository "$IMAGE_REPO" \
+  --parameter-overrides S3BucketName=$S3_BUCKET_NAME EnvironmentName=dev
 ```
 
 ### Guided Deployment Options
@@ -204,7 +216,7 @@ EOF
 # Upload to the bucket (uploads/ prefix is required)
 aws s3 cp test-file.json s3://$BUCKET/uploads/test-file.json
 
-# Check the bucket for both original and compressed file
+# Check the bucket for compressed file (original deleted)
 aws s3 ls s3://$BUCKET/uploads/ --recursive
 ```
 
@@ -305,7 +317,7 @@ aws cloudwatch get-metric-statistics \
 aws logs tail /aws/lambda/dev-s3-zipper-function --follow
 
 # 3. Test Lambda locally
-sam local invoke S3ZipperFunction -e test-event.json
+sam local invoke S3ZipperFunction -e events/test-event.json
 ```
 
 ### S3 Permission Denied Errors
@@ -430,3 +442,16 @@ For issues, questions, or contributions:
 - [AWS Lambda Documentation](https://docs.aws.amazon.com/lambda/)
 - [AWS S3 Documentation](https://docs.aws.amazon.com/s3/)
 - [AWS CloudFormation Best Practices](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html)
+## Implementation Summary
+
+- Trigger: S3 `ObjectCreated:*` on prefix `uploads/` wired via SAM `Events` (`template.yaml`).
+- Lambda: Python 3.11 container image, compresses with `ZIP_DEFLATED`, uploads `.zip`, deletes original (`src/app.py`).
+- IAM: Least-privilege S3 Get/Put/Delete/List on the parameterized bucket, CloudWatch Logs.
+- CI/CD: GitHub Actions builds with SAM, logs into ECR, and deploys on `main`.
+- Validation: Successful workflow run and S3 objects show zipped outputs.
+
+## CI/CD
+
+- Add repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
+- Push to `main` to trigger build and deploy.
+- Workflow uses `--stack-name s3-zipper-app-stack`, passes region, and deploys the image to ECR.
