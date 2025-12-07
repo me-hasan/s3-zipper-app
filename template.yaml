@@ -72,11 +72,11 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                   - s3:DeleteObject
-                Resource: !Sub '${S3ZipperBucket.Arn}/*'
+                Resource: !Sub 'arn:aws:s3:::${S3BucketName}/*'
               - Effect: Allow
                 Action:
                   - s3:ListBucket
-                Resource: !GetAtt S3ZipperBucket.Arn
+                Resource: !Sub 'arn:aws:s3:::${S3BucketName}'
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-lambda-role
